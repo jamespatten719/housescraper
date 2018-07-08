@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Jun 16 19:19:06 2018
-
-@author: jamespatten
-"""
-
-# -*- coding: utf-8 -*-
-"""
 Created on Tue May 29 21:27:57 2018
 @author: jamespatten
 """
 
 #------Imports------# 
-#Extraction/Wrangling
 import pandas as pd
 import numpy as np
 from sklearn import preprocessing
@@ -43,7 +35,7 @@ addresses = []
 infos = []
 description = []
 start = time.time()
-for i in range(1,101): #max is 101
+for i in range(1,2): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
     urls.append(url)
 for url in urls:
@@ -72,21 +64,13 @@ df['price'].isnull().values.any()
 addresses = [address.replace('\n', '') for address in addresses]
 df['address'] = pd.Series(addresses)
 df['address'] = df['address'].str.replace(',','')
-#postcode - now includes numbers (e.g. start of a house number )
+#postcode
+postcodes = []
 for address in addresses:
-    words = address.split(",")
-    words = words[-1].split(' ')
-    drop = [i for i,y in enumerate(words) if (bool(re.search(r'\d', y))) == False or (y =='') or (y=='...')]
-    for i in sorted(drop, reverse=True):
-        del words[i]
-    postcode = ' '.join(words)
+    words = address.split()  # list of words
+    postcode = words[-1]
     postcodes.append(postcode)
-    df['postcode'] = postcodes 
-    le = preprocessing.LabelEncoder()
-    le.fit(postcodes)
-    le.classes_
-    postcode_code = le.transform(postcodes)
-df['postcode_code'] = pd.Series(postcode_code)
+df['postcode'] = postcodes
 #boroughs
 boroughs = []
 for address in addresses:
@@ -97,6 +81,7 @@ for address in addresses:
         del words[i]
     borough = ' '.join(words)
     boroughs.append(borough)
+    le = preprocessing.LabelEncoder()
     le.fit(boroughs)
     le.classes_
     boroughcode = le.transform(boroughs)
@@ -110,16 +95,12 @@ for i in df['address']:
     geocode = g.latlng
     geocodes.append(geocode)
 df['geocode'] = geocodes 
-#number of bedrooms 
+#number of bedrooms
 nobeds = []
 for x in description:
      bed = x.split()[0]
      if bed == 'Studio':
          bed = 1
-     if bed == 'Detached':
-         bed = 3
-     if bed == 'Terraced':
-        bed = 2
      nobeds.append(bed)
 df['nobed'] = pd.Series(nobeds)
 #housetype
@@ -132,8 +113,8 @@ for x in description:
     housetypes.append(housetype)
 df['type'] = pd.Series(housetypes)
 df['type'].dropna(how='any', inplace=True) 
-df['typecode'].value_counts() #count of distinct values - need to redo this cause getting NaN values
-df['typecode'] = df['type'].map( {'flat': 0, 'terracedhouse': 1,'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5})
+df['type'].value_counts() #count of distinct values - need to redo this cause getting NaN values
+df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5})
 #df = df.drop(['desc'], axis=1)
 
 #further data preprocessing
@@ -144,7 +125,7 @@ df = df.dropna() #
 #pd.DataFrame(np.asarray(valores, dtype=np.float))
 
 #----Prediction Model----#
-model_cols = ['price','boroughcode','nobed','typecode','postcode_code']
+model_cols = ['price','boroughcode','nobed','type']
 df = df[model_cols]
 X = df.drop("price", axis=1)
 y = df["price"]
@@ -177,18 +158,19 @@ print(mlp_score)
 
 #output prediction based on parameters
 #How to do it in R
-input = pd.DataFrame(columns=('boroughcode','nobed','typecode'))
+input = pd.DataFrame(columns=('boroughcode','nobed','type'))
 input.at[1, 'boroughcode'] = 6
 input.at[1, 'nobed'] = 3
-input.at[1, 'typecode'] = 4
+input.at[1, 'type'] = 4
 print(tree.predict(input))
 
 end=time.time()
-time_elapsed = end - start
-print(time_elapsed)
+#time_elapsed = end - start
+#print(time_elapsed)
 
     
 #------Output File ------#
 #with open('index.csv', 'a') as csv_file:
 #writer = csv.writer(csv_file)
+#writer.writerow([search.listing, datetime.now()])
 #writer.writerow([search.listing, datetime.now()])
