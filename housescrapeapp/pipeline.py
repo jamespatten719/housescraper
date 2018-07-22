@@ -19,6 +19,9 @@ from contextlib import closing
 from bs4 import BeautifulSoup
 import requests
 
+#databse tools 
+from sqlalchemy import create_engine
+
 #Modelling 
 from sklearn.cross_validation import train_test_split
 from sklearn.linear_model import LinearRegression
@@ -28,6 +31,7 @@ from sklearn.neural_network import MLPRegressor
 
 #------Set-up Data Drame------#)
 df = pd.DataFrame()
+
 #------Web Scraper/Data Extraction ------#
 urls = []
 prices = []
@@ -94,7 +98,14 @@ for i in df['address']:
     g = geocoder.google(str(i))
     geocode = g.latlng
     geocodes.append(geocode)
+    geocodes = [[0,0] if x==None else x for x in geocodes]
 df['geocode'] = geocodes 
+#lat long seperates
+lat, lng = zip(*geocodes)
+df['lat'] = lat
+df['lng'] = lng
+
+
 #number of bedrooms
 nobeds = []
 for x in description:
@@ -117,8 +128,12 @@ df['type'].value_counts() #count of distinct values - need to redo this cause ge
 df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5})
 #df = df.drop(['desc'], axis=1)
 
-#further data preprocessing
-df = df.dropna() #
+#---further data preprocessing---#
+#create an id column
+
+df = df.dropna()
+
+#df["id"] = df.index + 1
 
 #-----EDA-----#
 #mean = np.asarray(df.iloc[:,0], dtype=np.float).mean()
@@ -126,9 +141,9 @@ df = df.dropna() #
 
 #----Prediction Model----#
 model_cols = ['price','boroughcode','nobed','type']
-df = df[model_cols]
-X = df.drop("price", axis=1)
-y = df["price"]
+df_model = df[model_cols]
+X = df_model.drop("price", axis=1)
+y = df_model["price"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2)
 
 #Linear Regression
@@ -168,8 +183,14 @@ end=time.time()
 #time_elapsed = end - start
 #print(time_elapsed)
 
-    
-#------Output File ------#
+#------Outputs ------#
+engine = create_engine("mysql+pymysql://root:root@localhost:3306/houses")
+df_sql = df.drop('geocode',axis =1)
+df_sql.to_sql(name= 'houses', con=engine, if_exists='append', index=False)
+
+#need to think of a duplicate management system
+
+
 #with open('index.csv', 'a') as csv_file:
 #writer = csv.writer(csv_file)
 #writer.writerow([search.listing, datetime.now()])
