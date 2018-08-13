@@ -5,6 +5,7 @@ Created on Tue May 29 21:27:57 2018
 """
 
 #------Imports------# 
+#pipeline
 import pandas as pd
 import numpy as np
 from sklearn import preprocessing
@@ -21,6 +22,7 @@ import requests
 
 #databse tools 
 from sqlalchemy import create_engine
+import pymysql
 
 #Modelling 
 from sklearn.cross_validation import train_test_split
@@ -29,15 +31,22 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPRegressor
 
+#frontend/geospatial
+from geojson import Feature, Point, FeatureCollection
+import json
+import websockets
+import asyncio
+
 #------Set-up Data Drame------#)
 df = pd.DataFrame()
 
 #------Web Scraper/Data Extraction ------#
 urls = []
+housePages = []
 prices = []
 addresses = []
-infos = []
 description = []
+hyperlinks = []
 start = time.time()
 for i in range(1,2): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
@@ -49,12 +58,49 @@ for url in urls:
         prices.append(price.text) 
     for address in soup.find_all('a', {'class': 'listing-results-address'}):
         addresses.append(address.text)
-    for info in soup.find_all('p',attrs={"class":None}):
-        infos.append(info.text)  
     for descs in soup.find_all('h2', {'class':'listing-results-attr'}):
         desc = descs.find('a').contents[0]
         description.append(desc)
 
+for hyperlink in soup.find_all('a', {'class': 'listing-results-address'}):
+    hyperlinks.append(hyperlink['href'])
+for link in hyperlinks:
+    house_page = 'https://www.zoopla.co.uk' + str(link)
+    housePages.append(house_page)
+
+infos = []
+mbps = []
+for page in housePages:
+    r = requests.get(url)
+    soupPage = BeautifulSoup(r.content, 'lxml')
+    
+for div in soupPage.find_all('div',attrs={"class":"dp-info-wrapper dp-subgroup"}):       
+    infodesc = info.find('div', attrs={"class":"dp-description__text"})
+    print(infodesc)
+    
+test = []
+for i in soupPage.find_all('div',{"class":"dp-info-wrapper dp-subgroup"}):
+    i = i.find_all('section', {"class":"dp-description"})
+    print(i)
+    for x in i:
+        xyz = x.find('div',{"class":"dp-description__text"})
+        test.append(xyz.text)
+print(xyz)
+   
+for i in range(1,10):
+    print(i)
+
+
+
+
+
+
+
+ 
+for speed in soupPage.find_all('article',attrs={"class":"dp-broadband-speed"}):        
+    speed = speed.find('p',attrs={"class":"dp-broadband-speed"})
+    mbps.append(speed)
+        
 #------Data Wrangling/Feature Engineering------#
 #price
 df['price'] = prices
@@ -172,7 +218,6 @@ mlp_score = mlp.score(X_test, y_test)
 print(mlp_score)
 
 #output prediction based on parameters
-#How to do it in R
 input = pd.DataFrame(columns=('boroughcode','nobed','type'))
 input.at[1, 'boroughcode'] = 6
 input.at[1, 'nobed'] = 3
@@ -184,14 +229,29 @@ end=time.time()
 #print(time_elapsed)
 
 #------Outputs ------#
+#Write into dataset using SQL Alchemy
 engine = create_engine("mysql+pymysql://root:root@localhost:3306/houses")
 df_sql = df.drop('geocode',axis =1)
 df_sql.to_sql(name= 'houses', con=engine, if_exists='append', index=False)
+#need to create a duplicate management system - same id but different timestamp
 
-#need to think of a duplicate management system
+#create geojson using long and lat 
+connection = pymysql.connect(host='localhost', port=3306, user='root', db='houses',password='root')
+cur = connection.cursor()
+cur.execute("SELECT LNG, LAT FROM HOUSES")
+sql_geom=list(cur.fetchall())
 
+#create GeoJSON FeatureCollection
+features = []
+for i in sql_geom:
+    feature = Feature(geometry=Point(i))
+    features.append(feature)
+feature_collection = FeatureCollection(features)
 
-#with open('index.csv', 'a') as csv_file:
-#writer = csv.writer(csv_file)
-#writer.writerow([search.listing, datetime.now()])
-#writer.writerow([search.listing, datetime.now()])
+#websocket to send FeatureCollection to Node.js client
+async def send(websocket, path):
+        await websocket.send(json.dumps(feature_collection))
+
+start_server = websockets.serve(send, 'localhost', 40510)
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
