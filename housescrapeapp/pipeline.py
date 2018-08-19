@@ -20,6 +20,9 @@ from contextlib import closing
 from bs4 import BeautifulSoup
 import requests
 
+#calc tools
+from statistics import median
+
 #databse tools 
 from sqlalchemy import create_engine
 import pymysql
@@ -37,18 +40,19 @@ import json
 import websockets
 import asyncio
 
-#------Set-up Data Drame------#)
+#------Set-up Data Drame------#
 df = pd.DataFrame()
 
 #------Web Scraper/Data Extraction ------#
 urls = []
-housePages = []
 prices = []
 addresses = []
+infos = []
 description = []
 hyperlinks = []
+housePages = []
 start = time.time()
-for i in range(1,2): #max is 101
+for i in range(1,5): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
     urls.append(url)
 for url in urls:
@@ -61,46 +65,49 @@ for url in urls:
     for descs in soup.find_all('h2', {'class':'listing-results-attr'}):
         desc = descs.find('a').contents[0]
         description.append(desc)
-
-for hyperlink in soup.find_all('a', {'class': 'listing-results-address'}):
-    hyperlinks.append(hyperlink['href'])
-for link in hyperlinks:
-    house_page = 'https://www.zoopla.co.uk' + str(link)
-    housePages.append(house_page)
+    for info in soup.find_all('p',attrs={"class":None}):
+        infos.append(info.text)  
+    #Scraping House Page data
+    for hyperlink in soup.find_all('a', {'class': 'listing-results-address'}):
+        hyperlinks.append(hyperlink['href'])
+    for link in hyperlinks:
+        house_page = 'https://www.zoopla.co.uk' + str(link)
+        housePages.append(house_page)
 
 infos = []
+closestSchool_distance = []
+closestStation_distance = []
 mbps = []
 for page in housePages:
-    r = requests.get(url)
+    r = requests.get(page)
     soupPage = BeautifulSoup(r.content, 'lxml')
     
-for div in soupPage.find_all('div',attrs={"class":"dp-info-wrapper dp-subgroup"}):       
-    infodesc = info.find('div', attrs={"class":"dp-description__text"})
-    print(infodesc)
-    
-test = []
-for i in soupPage.find_all('div',{"class":"dp-info-wrapper dp-subgroup"}):
-    i = i.find_all('section', {"class":"dp-description"})
-    print(i)
-    for x in i:
-        xyz = x.find('div',{"class":"dp-description__text"})
-        test.append(xyz.text)
-print(xyz)
-   
-for i in range(1,10):
-    print(i)
+    #scrape the property desc
+    info = soupPage.find('div',{"class":"dp-description__text"})
+    infos.append(info.text)
 
-
-
-
-
-
-
- 
-for speed in soupPage.find_all('article',attrs={"class":"dp-broadband-speed"}):        
-    speed = speed.find('p',attrs={"class":"dp-broadband-speed"})
-    mbps.append(speed)
+    #scrape the distance to nearest school and train station
+    amenities_distance = soupPage.find_all('span',attrs={"class":"ui-local-amenities-item__distance"})
+    amenityDistances = []
+    for distance in amenities_distance:
+        distance = distance.text
+        distance = distance.replace(' miles','')
+        amenityDistances.append(distance)
+    schoolDistances = amenityDistances[:2]
+    stationDistances = amenityDistances[2:]
+    closestSchool_distance.append(min(schoolDistances))
+    closestStation_distance.append(min(stationDistances))
         
+    #scrape broadband speed 
+    speed = soupPage.find_all('p',attrs={"class":"dp-broadband-speed__wrapper-text"})
+    if speed == []:
+        speed = 'None'
+        mbps.append(speed)
+    else:
+        mbps.append(speed[-1].text)
+        
+    
+
 #------Data Wrangling/Feature Engineering------#
 #price
 df['price'] = prices
@@ -171,22 +178,31 @@ for x in description:
 df['type'] = pd.Series(housetypes)
 df['type'].dropna(how='any', inplace=True) 
 df['type'].value_counts() #count of distinct values - need to redo this cause getting NaN values
-df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5})
+df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5}) # need to change this to one hot encoding
 #df = df.drop(['desc'], axis=1)
+
+#closest school
+df['closestSchool'] = closestSchool_distance
+
+#closest station
+df['closestStation'] = closestStation_distance
+
+#broadband speed - mbps
+df['mbps'] = mbps
+df['mbps'] = df['mbps'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True) 
+medianMbps = [] #replace Null values with median of ingested data
+for i in df['mbps']:
+    if pd.isnull(i) == False:
+        medianMbps.append(i)
+df['mbps'] = df['mbps'].fillna(median(medianMbps))
 
 #---further data preprocessing---#
 #create an id column
 
 df = df.dropna()
 
-#df["id"] = df.index + 1
-
-#-----EDA-----#
-#mean = np.asarray(df.iloc[:,0], dtype=np.float).mean()
-#pd.DataFrame(np.asarray(valores, dtype=np.float))
-
 #----Prediction Model----#
-model_cols = ['price','boroughcode','nobed','type']
+model_cols = ['price','boroughcode','nobed','type','mbps','closestSchool','closesStation']
 df_model = df[model_cols]
 X = df_model.drop("price", axis=1)
 y = df_model["price"]
