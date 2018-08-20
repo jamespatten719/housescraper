@@ -51,22 +51,14 @@ infos = []
 description = []
 hyperlinks = []
 housePages = []
-start = time.time()
+
 for i in range(1,5): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
     urls.append(url)
 for url in urls:
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'lxml')
-    for price in soup.find_all('a', {"class":"listing-results-price text-price"}):
-        prices.append(price.text) 
-    for address in soup.find_all('a', {'class': 'listing-results-address'}):
-        addresses.append(address.text)
-    for descs in soup.find_all('h2', {'class':'listing-results-attr'}):
-        desc = descs.find('a').contents[0]
-        description.append(desc)
-    for info in soup.find_all('p',attrs={"class":None}):
-        infos.append(info.text)  
+    
     #Scraping House Page data
     for hyperlink in soup.find_all('a', {'class': 'listing-results-address'}):
         hyperlinks.append(hyperlink['href'])
@@ -74,13 +66,27 @@ for url in urls:
         house_page = 'https://www.zoopla.co.uk' + str(link)
         housePages.append(house_page)
 
+#lists to hold data for dataframe
+prices = []
+addresses = []
 infos = []
 closestSchool_distance = []
 closestStation_distance = []
 mbps = []
+noBedrooms = []
+noBathrooms = []
+
 for page in housePages:
     r = requests.get(page)
     soupPage = BeautifulSoup(r.content, 'lxml')
+    
+    #scrape price
+    price = soupPage.find('p', {"class":"ui-pricing__main-price"})
+    prices.append(price.text)
+    
+    #scrape address
+    address = soupPage.find('h2', {"class":"ui-prop-summary__address"})
+    addresses.append(address.text)
     
     #scrape the property desc
     info = soupPage.find('div',{"class":"dp-description__text"})
@@ -106,17 +112,28 @@ for page in housePages:
     else:
         mbps.append(speed[-1].text)
         
-    
+    #scrape number of bedrooms
+    bedroomNo = soupPage.find_all('li',attrs={"class":"ui-list-icons__item"})
+    for item in bedroomNo:
+        if 'bedroom' in item.text:
+            noBedrooms.append(item.text)
+
+    #scrape number of bathrooms
+    bathroomNo = soupPage.find_all('li',attrs={"class":"ui-list-icons__item"})
+    for item in bathroomNo:
+        if 'bathroom' in item.text:
+            noBathrooms.append(item.text)
+
 
 #------Data Wrangling/Feature Engineering------#
 #price
 df['price'] = prices
 df['price'] = df['price'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True) #remove extract numbers with commas
 df['price'] = df['price'].str.replace(',','')
-df['price'].dropna(how='any', inplace=True)
+d#f['price'].dropna(how='any', inplace=True)
 df['price'] = df['price'].astype('int64') 
-df['price'].dropna(how='any', inplace=True)    
-df['price'].isnull().values.any()
+#df['price'].dropna(how='any', inplace=True)    
+#df['price'].isnull().values.any()
 #adresses
 addresses = [address.replace('\n', '') for address in addresses]
 df['address'] = pd.Series(addresses)
@@ -160,26 +177,33 @@ df['lng'] = lng
 
 
 #number of bedrooms
-nobeds = []
 for x in description:
      bed = x.split()[0]
      if bed == 'Studio':
          bed = 1
      nobeds.append(bed)
-df['nobed'] = pd.Series(nobeds)
-#housetype
-start = 'bed'
-end = 'for'
-housetypes = []
-for x in description:
-    y = x.replace(' ','')
-    housetype = y[y.find(start)+len(start):y.rfind(end)]
-    housetypes.append(housetype)
-df['type'] = pd.Series(housetypes)
-df['type'].dropna(how='any', inplace=True) 
-df['type'].value_counts() #count of distinct values - need to redo this cause getting NaN values
-df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5}) # need to change this to one hot encoding
-#df = df.drop(['desc'], axis=1)
+df['nobed'] = noBedrooms
+df['nobed'] = df['nobed'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True)
+
+pd.Series(nobeds)
+
+#number of bathrooms
+df['nobath'] = noBathrooms
+df['nobath'] = df['nobath'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True)
+
+##housetype
+#start = 'bed'
+#end = 'for'
+#housetypes = []
+#for x in description:
+#    y = x.replace(' ','')
+#    housetype = y[y.find(start)+len(start):y.rfind(end)]
+#    housetypes.append(housetype)
+#df['type'] = pd.Series(housetypes)
+#df['type'].dropna(how='any', inplace=True) 
+#df['type'].value_counts() #count of distinct values - need to redo this cause getting NaN values
+#df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5}) # need to change this to one hot encoding
+##df = df.drop(['desc'], axis=1)
 
 #closest school
 df['closestSchool'] = closestSchool_distance
@@ -202,7 +226,7 @@ df['mbps'] = df['mbps'].fillna(median(medianMbps))
 df = df.dropna()
 
 #----Prediction Model----#
-model_cols = ['price','boroughcode','nobed','type','mbps','closestSchool','closesStation']
+model_cols = ['price','nobed','nobath','mbps','closestSchool','closesStation']
 df_model = df[model_cols]
 X = df_model.drop("price", axis=1)
 y = df_model["price"]
@@ -240,7 +264,6 @@ input.at[1, 'nobed'] = 3
 input.at[1, 'type'] = 4
 print(tree.predict(input))
 
-end=time.time()
 #time_elapsed = end - start
 #print(time_elapsed)
 
