@@ -113,16 +113,17 @@ for page in housePages:
         mbps.append(speed[-1].text)
         
     #scrape number of bedrooms
+    #create if statement that takes the median bathroom/bedroom number if it doesn't exist
     bedroomNo = soupPage.find_all('li',attrs={"class":"ui-list-icons__item"})
     for item in bedroomNo:
         if 'bedroom' in item.text:
             noBedrooms.append(item.text)
-
-    #scrape number of bathrooms
-    bathroomNo = soupPage.find_all('li',attrs={"class":"ui-list-icons__item"})
-    for item in bathroomNo:
-        if 'bathroom' in item.text:
+        elif 'bathroom' in item.text:
             noBathrooms.append(item.text)
+        
+    for item in bedroomNo:
+        if 
+
 
 
 #------Data Wrangling/Feature Engineering------#
@@ -177,11 +178,7 @@ df['lng'] = lng
 
 
 #number of bedrooms
-for x in description:
-     bed = x.split()[0]
-     if bed == 'Studio':
-         bed = 1
-     nobeds.append(bed)
+
 df['nobed'] = noBedrooms
 df['nobed'] = df['nobed'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True)
 
