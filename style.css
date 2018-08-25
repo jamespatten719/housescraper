@@ -1,0 +1,40 @@
+#body {
+	height: 100%;
+	width:100%;
+	margin: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	}
+
+#banner {
+	height: 50px;
+	top:0px;
+	left:0px;
+	right:0px;
+	width: 100%;
+	background-color: #000000;
+    position:fixed;
+}
+		
+#sidepane {
+	position: fixed;
+	height: 100%;
+	width: 400px;
+	top: 50px;
+	right: 0px;
+	background: #ffffff;
+	border: 1px solid #ccc;
+	border-top: none;
+	font-size: 14px;		
+}
+
+#map {
+	height:100%;
+	width:100%;
+	top:50px;
+	left:0px;
+	z-index: -1;
+	position:fixed;
+}
