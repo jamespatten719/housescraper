@@ -7,21 +7,22 @@ Created on Tue May 29 21:27:57 2018
 #------Imports------# 
 #pipeline
 import pandas as pd
-import numpy as np
 from sklearn import preprocessing
 import re
 import csv
 import time
 import geocoder
 from datetime import datetime
-from requests import get
-from requests.exceptions import RequestException
-from contextlib import closing
+
+#webscraper
 from bs4 import BeautifulSoup
 import requests
-
+from requests import get
 #calc tools
+import numpy as np
 from statistics import median
+from requests.exceptions import RequestException
+from contextlib import closing
 
 #databse tools 
 from sqlalchemy import create_engine
@@ -48,7 +49,7 @@ urls = []
 hyperlinks = []
 housePages = []
 
-for i in range(1,5): #max is 101
+for i in range(1,2): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
     urls.append(url)
 for url in urls:
@@ -165,7 +166,7 @@ df['address'] = df['address'].str.replace(',','')
 #    postcodes.append(postcode)
 #df['postcode'] = postcodes
 
-#boroughs
+#areas
 #boroughs = []
 #for address in addresses:
 #    words = address.split(",")
@@ -175,14 +176,10 @@ df['address'] = df['address'].str.replace(',','')
 #        del words[i]
 #    borough = ' '.join(words)
 #    boroughs.append(borough)
-#    le = preprocessing.LabelEncoder()
-#    le.fit(boroughs)
-#    le.classes_
-#    boroughcode = le.transform(boroughs)
 #df['borough'] = pd.Series(boroughs)
-#df['boroughcode']  = boroughcode
-#df['borough'].value_counts()
-#
+#df_boroughs = pd.get_dummies(df, columns=["borough"])
+#df = [df, df_boroughs]
+
 ##geocodes
 #geocodes = [] #convert address to geocode so that it can be visualised on a map
 #for i in df['address']:
@@ -217,19 +214,24 @@ for i in df['nobath']:
 medianNoBath = list(map(int, medianNoBath))
 df['nobath'] = df['nobath'].fillna(median(medianNoBath))
 
-##housetype
-#start = 'bed'
-#end = 'for'
-#housetypes = []
-#for x in description:
-#    y = x.replace(' ','')
-#    housetype = y[y.find(start)+len(start):y.rfind(end)]
-#    housetypes.append(housetype)
-#df['type'] = pd.Series(housetypes)
-#df['type'].dropna(how='any', inplace=True) 
-#df['type'].value_counts() #count of distinct values - need to redo this cause getting NaN values
-#df['type'] = df['type'].map( {'flat': 0, 'terracedhouse': 1, 'semi-detachedhouse': 2, 'property': 3, 'maisonette': 4, 'endterracehouse': 1, 'detachedhouse': 5, 'udio': 6, 'bungalow': 7, 'mewshouse':8, 'link-detachedhouse':5, 'semi-detachedbungalow':9,'townhouse':10, 'rracedhouse':1,'tachedhouse':5}) # need to change this to one hot encoding
-##df = df.drop(['desc'], axis=1)
+#housetype
+start = 'bed'
+end = 'for'
+housetypes = []
+for x in descs:
+    #y = x.replace(' ','')
+    housetype = x[x.find(start)+len(start):x.rfind(end)]
+    housetype = housetype.strip()
+    if housetype == 'Studio':
+        housetype = 'flat'
+    if housetype == 'end terrace house':
+        housetype = 'terraced house'
+    if housetype == 'Property' or housetype == 'property':
+        housetype = 'flat'
+    housetypes.append(housetype)
+df['type'] = housetypes 
+df_types = pd.get_dummies(df, columns=["type"])
+df = [df, df_types]
 
 #closest school
 closestSchool_distance = list(map(float, closestSchool_distance))
@@ -251,7 +253,7 @@ df['mbps'] = df['mbps'].fillna(median(medianMbps))
 
 #----Further Data Preprocessing----#
 
-df = df.dropna()
+#df = df.dropna()
 
 #----Prediction Model----#
 model_cols = ['price','nobed','nobath','mbps','closestSchool','closestStation']
