@@ -4,7 +4,7 @@
 	<!-- cartodb.js comes with Leaflet @0.7 and jQuery -->
 	<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
 	<link rel="stylesheet" href="style.css" type="text/css">
-    	<script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+    <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 	<script src="http://api.tiles.mapbox.com/mapbox.js/plugins/turf/v2.0.0/turf.min.js"></script>
 	<script type="text/javascript" src="http://mbostock.github.com/d3/d3.js?2.4.5"></script>
@@ -16,7 +16,12 @@
 
 <body>
 	<div id="banner"></div>
-	<div id="sidepane"></div>
+	<div id="sidepane">
+		<form action="/index" method="POST">
+			Please enter a house description: <input type="text" name="sentence" value="E.g. 3 bedroom flat in Harrow"><br>
+			<input type="submit" value="Submit">
+		</form>
+	</div>
 	<div id="map" class = "map"></div>
 	<script type="text/javascript">
 		
@@ -32,7 +37,7 @@
 		// necessary for making AJAX calls on Blockbuilder.org as of 2016-11-02
 		jQuery.support.cors = true;
 		// create a new map centered on London.
-		var map = L.map('map').setView([51.47, 0.25], 10);
+		var map = L.map('map').setView([51.5, 0.25], 10);
 		map.on('click');
 
 		// create a tile layer for  the basemap
@@ -44,12 +49,27 @@
 			id: 'mapbox.light'
 		}).addTo(map);
 		
+		//GeoJSON styling
+		var geojsonMarkerOptions = {
+			radius : 4,
+			fillColor : "#9ACD66",
+			color : "#000",
+			weight : 1,
+			opacity : 1,
+			fillOpacity : 0.8
+		};
+		
 		// event emmited when receiving message 
 		ws.onmessage = function (ev) {
 			console.log('GeoJSONs Recieved');
 			console.log(ev.data);
 			var feature = JSON.parse(ev.data);
-			var geojsonLayer = new L.GeoJSON(feature);
+			var geojsonLayer = new L.GeoJSON(feature,{ //clear this to get rid of map circles
+				pointToLayer : function(feature, latlng) {
+					return L.circleMarker(latlng, geojsonMarkerOptions);
+					}	
+				}
+			);
 			map.addLayer(geojsonLayer);
 		};
 	</script>
