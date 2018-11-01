@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue May 29 21:27:57 2018
+
 @author: jamespatten
+
+Data Extraction, Transformation & Modelling
 """
 
 #------Imports------# 
@@ -12,7 +15,8 @@ import re
 import csv
 import time
 import geocoder
-from datetime import datetime
+from geopy.geocoders import Nominatim
+import datetime
 
 #webscraper
 from bs4 import BeautifulSoup
@@ -28,12 +32,6 @@ from contextlib import closing
 from sqlalchemy import create_engine
 import pymysql
 
-#Modelling 
-from sklearn.cross_validation import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.neural_network import MLPRegressor
 
 #frontend/client tools
 from geojson import Feature, Point, FeatureCollection
@@ -49,7 +47,7 @@ urls = []
 hyperlinks = []
 housePages = []
 
-for i in range(1,2): #max is 101
+for i in range(1,5): #max is 101
     url = 'https://www.zoopla.co.uk/for-sale/property/london/?identifier=london&page_size=100&q=London&search_source=refine&radius=0&pn='+ str(i)
     urls.append(url)
 for url in urls:
@@ -113,10 +111,19 @@ for page in housePages:
         distance = distance.text
         distance = distance.replace(' miles','')
         amenityDistances.append(distance)
+    amenityDistances = amenityDistances[:4]
     schoolDistances = amenityDistances[:2]
     stationDistances = amenityDistances[2:]
     closestSchool_distance.append(min(schoolDistances))
     closestStation_distance.append(min(stationDistances))
+#    if len(schoolDistances) == 0:
+#        closestSchool_distance.append(np.nan)
+#    else:
+#        closestSchool_distance.append(min(schoolDistances))
+#    if len(amenityDistances) == 0:
+#        closestStation_distance.append(np.nan)
+#    else:
+#        closestStation_distance.append(min(stationDistances))
         
     #scrape broadband speed 
     speed = soupPage.find_all('p',attrs={"class":"dp-broadband-speed__wrapper-text"})
@@ -180,19 +187,34 @@ df['address'] = df['address'].str.replace(',','')
 #df_boroughs = pd.get_dummies(df, columns=["borough"])
 #df = [df, df_boroughs]
 
-##geocodes
+#geocodes
 #geocodes = [] #convert address to geocode so that it can be visualised on a map
 #for i in df['address']:
 #    g = geocoder.google(str(i))
 #    geocode = g.latlng
 #    geocodes.append(geocode)
 #    geocodes = [[0,0] if x==None else x for x in geocodes]
-#df['geocode'] = geocodes 
+##df['geocode'] = geocodes 
 #
-##lat long seperates
 #lat, lng = zip(*geocodes)
-#df['lat'] = lat
-#df['lng'] = lng
+
+
+geolocator=Nominatim(timeout=10, user_agent = "houses")
+lat = []
+lng = [] 
+for i in df['address']:
+    g = geolocator.geocode(str(i))
+    if g == None:
+        lat.append(0)
+        lng.append(0)
+    else:
+        lat.append(g.latitude)
+        lng.append(g.longitude)
+df['lat'] = lat
+df['lng'] = lng
+
+#lat long seperates
+
 
 #number of bedrooms
 df['nobed'] = noBedrooms
@@ -214,6 +236,36 @@ for i in df['nobath']:
 medianNoBath = list(map(int, medianNoBath))
 df['nobath'] = df['nobath'].fillna(median(medianNoBath))
 
+#closest school
+closestSchool_distance = list(map(float, closestSchool_distance))
+df['closestSchool'] = closestSchool_distance
+#medianClosestSchool = [] #replace Null values with median of ingested data
+#for i in df['closestSchool']:
+#    if pd.isnull(i) == False:
+#        medianClosestSchool.append(i)
+#medianPrice = list(map(float, medianClosestSchool))
+#df['closestSchool'] = df['closestSchool'].fillna(median(medianClosestSchool))
+
+#closest station
+closestStation_distance = list(map(float, closestStation_distance))
+df['closestStation'] = closestStation_distance
+#medianClosestStation = [] #replace Null values with median of ingested data
+#for i in df['closestStation']:
+#    if pd.isnull(i) == False:
+#        medianClosestStation.append(i)
+#medianPrice = list(map(float, medianClosestStation))
+#df['closestStation'] = df['closestStation'].fillna(median(medianClosestStation))
+
+#broadband speed - mbps
+df['mbps'] = mbps
+df['mbps'] = df['mbps'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True) 
+medianMbps = [] #replace Null values with median of ingested data
+for i in df['mbps']:
+    if pd.isnull(i) == False:
+        medianMbps.append(i)
+medianMbps = list(map(float, medianMbps))
+df['mbps'] = df['mbps'].fillna(median(medianMbps))
+
 #housetype
 start = 'bed'
 end = 'for'
@@ -230,100 +282,14 @@ for x in descs:
         housetype = 'flat'
     housetypes.append(housetype)
 df['type'] = housetypes 
-df_types = pd.get_dummies(df, columns=["type"])
-df = [df, df_types]
 
-#closest school
-closestSchool_distance = list(map(float, closestSchool_distance))
-df['closestSchool'] = closestSchool_distance
-
-#closest station
-closestStation_distance = list(map(float, closestStation_distance))
-df['closestStation'] = closestStation_distance
-
-#broadband speed - mbps
-df['mbps'] = mbps
-df['mbps'] = df['mbps'].str.extract('(\d+([\d,]?\d)*(\.\d+)?)', expand=True) 
-medianMbps = [] #replace Null values with median of ingested data
-for i in df['mbps']:
-    if pd.isnull(i) == False:
-        medianMbps.append(i)
-medianMbps = list(map(float, medianMbps))
-df['mbps'] = df['mbps'].fillna(median(medianMbps))
-
-#----Further Data Preprocessing----#
-
-#df = df.dropna()
-
-#----Prediction Model----#
-model_cols = ['price','nobed','nobath','mbps','closestSchool','closestStation']
-df_model = df[model_cols]
-X = df_model.drop("price", axis=1)
-y = df_model["price"]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2)
-
-#Linear Regression
-reg = LinearRegression()
-reg.fit(X_train, y_train)
-reg.predict(X_test)
-reg_score = reg.score(X_test, y_test)
-print(reg_score)
-
-#Decision Trees
-tree = DecisionTreeRegressor()
-tree.fit(X_train, y_train)
-tree.predict(X_test)
-tree_score = tree.score(X_test, y_test)
-print(tree_score)
-
-#Random Forrest
-rf = RandomForestRegressor()
-rf.fit(X_train, y_train)
-rf.predict(X_test)
-rf_score = rf.score(X_test, y_test)
-print(rf_score)
-
-#Neural Networks
-mlp = MLPRegressor()
-mlp.fit(X_train, y_train)
-mlp.predict(X_test)
-mlp_score = mlp.score(X_test, y_test)
-print(mlp_score)
-
-#output prediction based on parameters
-input = pd.DataFrame(columns=('boroughcode','nobed','type'))
-input.at[1, 'boroughcode'] = 6
-input.at[1, 'nobed'] = 3
-input.at[1, 'type'] = 4
-print(tree.predict(input))
-
-#time_elapsed = end - start
-#print(time_elapsed)
-
-#------Outputs ------#
+#datetime
+dates = []
+for x in descs:
+    dates.append(str(datetime.datetime.now()))
+df['datetime'] = dates
+    
 #Write into dataset using SQL Alchemy
 engine = create_engine("mysql+pymysql://root:root@localhost:3306/houses")
-df_sql = df.drop('geocode',axis =1)
-df_sql.to_sql(name= 'houses', con=engine, if_exists='append', index=False)
-#need to create a duplicate management system - same id but different timestamp
+df.to_sql(name= 'houses', con=engine, if_exists='append', index=False)
 
-#create geojson using long and lat 
-connection = pymysql.connect(host='localhost', port=3306, user='root', db='houses',password='root')
-cur = connection.cursor()
-cur.execute("SELECT LNG, LAT FROM HOUSES")
-sql_geom=list(cur.fetchall())
-
-#create GeoJSON FeatureCollection
-features = []
-for i in sql_geom:
-    feature = Feature(geometry=Point(i))
-    features.append(feature)
-feature_collection = FeatureCollection(features)
-
-#websocket to send FeatureCollection to Node.js client
-async def send(websocket, path):
-        await websocket.send(json.dumps(feature_collection))
-
-start_server = websockets.serve(send, 'localhost', 40510)
-asyncio.get_event_loop().run_until_complete(start_server)
-asyncio.get_event_loop().run_forever()
