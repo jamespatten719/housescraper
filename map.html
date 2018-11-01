@@ -9,31 +9,22 @@
 	<!-- jQuery/jQuery-ui  -->
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 	<script type="text/javascript" src="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.10/jquery-ui.min.js"></script>
-	<link href="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.10/themes/ui-lightness/jquery-ui.css" rel="stylesheet" type="text/css" />	
-	<title>House Invest</title>
+	<link href="http://ajax.aspnetcdn.com/ajax/jquery.ui/1.8.10/themes/ui-lightness/jquery-ui.css" rel="stylesheet" type="text/css"/>	
+	<title>House Mapper</title>
 </head>
 
 <body>
 	<div id="banner"></div>
-	<div id="sidepane">
-		<form>
-			Please enter a house description: <input id = "sentence" class = "sentence" type="text" name = "sentence" value="E.g. 3 bedroom flat in Harrow"><br>
-			<button class="submit-button" type="button">Enter </button>
-		</form>
+	<div id="sidepane">	
+		<div id="sidebox"></div>	
+			<h1 id = "title">House Mapper</h1>
+				<form id = "houseDesc">
+					Please enter a house description: <input id = "sentence" class = "sentence" type="text" name = "sentence" value="E.g. 3 bedroom flat in Harrow"><br>
+					<button class="submit-button" type="button">Enter </button>
+				</form>
 	</div>
 	<div id="map" class = "map"></div>
 	<script type="text/javascript">
-		
-		//websocket connection for receiving GeoJSONs from server 
-		var ws = new WebSocket('ws://localhost:40510');
-		
-		// event emmited when connected
-		//ws.onopen = function () {
-			//console.log('websocket is connected ...')
-			// sending a send event to websocket server
-			//ws.send('connected')
-		//}
-		
 		// necessary for making AJAX calls on Blockbuilder.org as of 2016-11-02
 		jQuery.support.cors = true;
 		// create a new map centered on London.
@@ -59,11 +50,10 @@
 			fillOpacity : 0.8
 		};
 		
-		// event emmited when receiving message 
-		ws.onmessage = function (ev) {
-			console.log('GeoJSONs Recieved');
-			//console.log(ev.data);
-			var feature = JSON.parse(ev.data);
+		//Get GeoJSON data from server
+		$.get("/geojson", function(data) {
+			console.log("geoJSONs Recieved");	  
+			var feature = JSON.parse(data);
 			var geojsonLayer = new L.GeoJSON(feature,{ //clear this to get rid of map circles
 				pointToLayer : function(feature, latlng) {
 					return L.circleMarker(latlng, geojsonMarkerOptions);
@@ -71,22 +61,13 @@
 				}
 			);
 			map.addLayer(geojsonLayer);
-		};
-		
-		// on click function to send input string to NER 
-		$("#submit-button").button();
-		$("#submit-button").click(function() {
-			var string = document.getElementById('sentence').value
-			if(ws.readyState == 1) { //this isn't working
-				ws.send(string);
-				console.log(string);
-			};
 		});
 		
+		// on click function to send input string to NER script
 		$(function() {
 			$('button').click(function() {
 				$.ajax({
-					url: '/signUpUser',
+					url: '/sendSentence',
 					data: $('form').serialize(),
 					type: 'POST',
 					success: function(response) {
@@ -96,9 +77,15 @@
 						console.log(error);
 					}
 				});
+				
+				$.get("/sendPrice", function(data) {	  
+					$("#sidepane").append("<b>" + data + "</b>");
+					console.log(data);
+					
+				});
 			});
 		});
 		
-			
+					
 	</script>
 </body>
